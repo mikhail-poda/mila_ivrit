@@ -88,15 +88,14 @@ class VocabularyLearningScreen extends StatefulWidget {
       _VocabularyLearningScreenState();
 }
 
-class _VocabularyLearningScreenState extends State<VocabularyLearningScreen>
-    with WidgetsBindingObserver {
+class _VocabularyLearningScreenState extends State<VocabularyLearningScreen> with WidgetsBindingObserver {
   List<Word> words = [];
   Word? currentWord;
+  Timer? _autoSaveTimer;
   bool showTranslation = false;
   bool showEvaluation = false;
   final difficulties = ['again', 'good', 'easy'];
-  final uri =
-      'https://docs.google.com/spreadsheets/d/e/2PACX-1vTTUPG22pCGbrlYULESZ5FFyYTo9jyFGFEBk1Wx41gZiNvkonYcLPypdPGCZzFxTzywU4hCra4Fmx-b/pubhtml';
+  final uri = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTTUPG22pCGbrlYULESZ5FFyYTo9jyFGFEBk1Wx41gZiNvkonYcLPypdPGCZzFxTzywU4hCra4Fmx-b/pubhtml';
   bool _isSaving = false;
   bool _isLoading = true;
   String currentVocabulary = '';
@@ -108,6 +107,9 @@ class _VocabularyLearningScreenState extends State<VocabularyLearningScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     loadState();
+    _autoSaveTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      saveState();
+    });
   }
 
   Future<List<String>> getVocabularies() async {
@@ -403,7 +405,7 @@ class _VocabularyLearningScreenState extends State<VocabularyLearningScreen>
                         }).toList(),
                       ),
               ),
-              Text('Version: 0.4 • Word rank: ${currentWord?.rank ?? 0}'),
+              Text('Version: 0.5 • Word rank: ${currentWord?.rank ?? 0}'),
             ],
           ),
         ),
@@ -413,6 +415,7 @@ class _VocabularyLearningScreenState extends State<VocabularyLearningScreen>
 
   @override
   Future<void> dispose() async {
+    _autoSaveTimer?.cancel();
     await saveState();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
