@@ -1,5 +1,5 @@
 import 'dart:math';
-
+import 'dart:html' as html;
 import 'package:darq/darq.dart';
 import 'package:flutter/material.dart';
 import 'package:html/parser.dart' as parser;
@@ -8,6 +8,11 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'dart:async';
+
+
+const boldFont = TextStyle(fontWeight: FontWeight.bold);
+const lightFont = TextStyle(fontWeight: FontWeight.w300);
+const italicFont = TextStyle(fontWeight: FontWeight.w300, fontStyle: FontStyle.italic);
 
 void main() {
   runApp(const MyApp());
@@ -228,7 +233,9 @@ class _VocabularyLearningScreenState extends State<VocabularyLearningScreen> wit
         }
         break;
       case 'good':
-        if (currentWord!.rank < 4) {
+        if (currentWord!.rank == 0) {
+          currentWord!.rank = 3;
+        } else if (currentWord!.rank < 4) {
           currentWord!.rank += 1;
         } else if (currentWord!.rank > 5) {
           currentWord!.rank -= 1;
@@ -287,6 +294,35 @@ class _VocabularyLearningScreenState extends State<VocabularyLearningScreen> wit
     }
   }
 
+  Widget _buildDictionaryButtons(String word) {
+    if (!showTranslation || word.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 16.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          iconLink(Icons.list_alt, 'https://www.pealim.com/search/?q=${currentWord!.hebrew}', 24),
+          const SizedBox(width: 16),
+          iconLink(Icons.g_translate, 'https://translate.google.com/?sl=iw&tl=en&text=${currentWord!.hebrew}', 24,),
+          const SizedBox(width: 16),
+          iconLink(Icons.compare_arrows, 'https://context.reverso.net/translation/hebrew-english/${currentWord!.hebrew}', 30,),
+        ],
+      ),
+    );
+  }
+
+  IconButton iconLink(IconData icon, String link, double iconSize) {
+    return IconButton(
+      icon: Icon(icon, color: Colors.grey),
+      iconSize: iconSize,
+      onPressed: () {
+        final jsUrl = Uri.encodeFull(link);
+        html.window.open(jsUrl, '_blank');
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -310,7 +346,7 @@ class _VocabularyLearningScreenState extends State<VocabularyLearningScreen> wit
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  Text(' $currentVocabulary', style: Theme.of(context).textTheme.bodyLarge),
+                  Text(currentVocabulary, style: Theme.of(context).textTheme.bodyLarge),
                   Row(children: [
                     Icon(Icons.list, size: 30, color: Colors.black45),
                     Text(' ${words.length}', style: Theme.of(context).textTheme.bodyLarge),
@@ -331,7 +367,9 @@ class _VocabularyLearningScreenState extends State<VocabularyLearningScreen> wit
               ),
               Expanded(
                 child: Center(
-                  child: Card(
+                  child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [Card(
                     elevation: 4,
                     child: Container(
                       padding: const EdgeInsets.all(24.0),
@@ -340,72 +378,76 @@ class _VocabularyLearningScreenState extends State<VocabularyLearningScreen> wit
                         children: [
                           Text(
                             (currentWord?.english ?? 'Loading...').replaceAll('; ', '\n'),
-                            style: Theme.of(context).textTheme.headlineMedium,
+                            textScaler: const TextScaler.linear(2),
+                            style: lightFont,
                           ),
                           if (showTranslation) ...[
                             const SizedBox(height: 16),
                             Text(
                               currentWord?.hebrew ?? '',
-                              style: Theme.of(context).textTheme.headlineMedium,
+                              textScaler: TextScaler.linear(2.25),
+                              style: boldFont,
+                              textDirection: TextDirection.rtl,
                             ),
                             if (currentWord?.phonetic.isNotEmpty ?? false) ...[
                               const SizedBox(height: 8),
                               Text(
                                 currentWord?.phonetic ?? '',
-                                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                      fontStyle: FontStyle.italic,
-                                      fontSize: Theme.of(context).textTheme.headlineMedium!.fontSize!.toDouble() * 0.8,
-                                ),
+                                textScaler: const TextScaler.linear(1.75),
+                                style: italicFont,
                               ),
                             ],
                           ],
                         ],
                       ),
                     ),
-                  ),
+                 ),
+                    if (showTranslation) ...[
+                    _buildDictionaryButtons(currentWord?.hebrew ?? ''),
+                    const SizedBox(height: 16),
+                  ],]),
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 24.0),
-                child: !showTranslation
-                    ? ElevatedButton(
-                        onPressed: () => handleShowTranslation(),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.cyan,
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 16,
-                            horizontal: 32,
-                          ),
-                        ),
-                        child: const Text(
-                          '            Show            ',
-                          style: TextStyle(fontSize: 20),
-                        ),
-                      )
-                    : Row(
-                        children: difficulties.map((difficulty) {
-                          return Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                              child: ElevatedButton(
-                                onPressed: () => handleDifficultySelection(difficulty),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: getButtonColor(difficulty),
-                                  foregroundColor: Colors.black,
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                ),
-                                child: Text(
-                                  difficulty,
-                                  style: const TextStyle(fontSize: 20),
-                                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    !showTranslation
+                        ? ElevatedButton(
+                      onPressed: () => handleShowTranslation(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.cyan,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 32,),
+                      ),
+                      child: const Text('            Show            ', style: TextStyle(fontSize: 20),),
+                    )
+                        : Row(
+                      children: difficulties.map((difficulty) {
+                        return Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                            child: ElevatedButton(
+                              onPressed: () => handleDifficultySelection(difficulty),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: getButtonColor(difficulty),
+                                foregroundColor: Colors.black,
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                              ),
+                              child: Text(
+                                difficulty,
+                                style: const TextStyle(fontSize: 20),
                               ),
                             ),
-                          );
-                        }).toList(),
-                      ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
               ),
-              Text('Version: 0.5 • Word rank: ${currentWord?.rank ?? 0}'),
+              Text('Version: 0.7.4 • Word rank: ${currentWord?.rank ?? 0}'),
             ],
           ),
         ),
