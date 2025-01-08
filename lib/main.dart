@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:html/parser.dart' as parser;
 import 'package:http/http.dart' as http;
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'dart:async';
+import 'base_learning.dart';
 
 const boldFont = TextStyle(fontWeight: FontWeight.bold);
 const lightFont = TextStyle(fontWeight: FontWeight.w300);
@@ -33,19 +33,19 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class Word {
-  int rank;
+class Word extends LearnableItem {
   final String hebrew;
   final String english;
   final String phonetic;
 
   Word({
-    this.rank = 0,
+    super.rank = 0,
     required this.hebrew,
     required this.english,
     required this.phonetic,
   });
 
+  @override
   Map<String, dynamic> toJson() => {
         'rank': rank,
         'hebrew': hebrew,
@@ -60,85 +60,65 @@ class Word {
         phonetic: json['phonetic'],
       );
 
+  @override
   bool isNotEmpty() => english.isNotEmpty && hebrew.isNotEmpty;
 }
 
-class SavedState {
+class SavedState implements BaseSavedState {
   final List<Word> words;
+  final List<Word> excluded;
   final String currentVocabulary;
 
   SavedState({
     required this.words,
+    required this.excluded,
     required this.currentVocabulary,
   });
 
+  @override
   Map<String, dynamic> toJson() => {
-        'words': words.map((w) => w.toJson()).toList(),
-        'currentVocabulary': currentVocabulary,
-      };
+    'words': words.map((w) => w.toJson()).toList(),
+    'excluded': excluded.map((w) => w.toJson()).toList(),
+    'currentVocabulary': currentVocabulary
+  };
 
   factory SavedState.fromJson(Map<String, dynamic> json) => SavedState(
-        words: (json['words'] as List)
-            .map((w) => Word.fromJson(w))
-            .where((word) => word.isNotEmpty())
-            .toList(),
-        currentVocabulary: json['currentVocabulary'],
-      );
+    words: (json['words'] as List).map((w) => Word.fromJson(w)).where((word) => word.isNotEmpty()).toList(),
+    excluded: (json['excluded'] as List).map((w) => Word.fromJson(w)).where((word) => word.isNotEmpty()).toList(),
+    currentVocabulary: json['currentVocabulary'],
+  );
 }
 
-class VocabularyLearningScreen extends StatefulWidget {
+class VocabularyLearningScreen extends BaseLearningScreen<Word> {
   const VocabularyLearningScreen({super.key});
 
   @override
   State<VocabularyLearningScreen> createState() => _VocabularyLearningScreenState();
 }
 
-enum AppState {
-  loading,
-  error,
-  noInternet,
-  guess,
-  assessment
-}
-
-class AppError {
-  final String message;
-  final String? stackTrace;
-
-  AppError(this.message, [this.stackTrace]);
-}
-
-class _VocabularyLearningScreenState extends State<VocabularyLearningScreen> with WidgetsBindingObserver {
-  AppState _appState = AppState.loading;
-  AppError? _error;
-  List<Word> words = [];
-  Word? currentWord;
-  Timer? _autoSaveTimer;
+class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, VocabularyLearningScreen> with WidgetsBindingObserver {
   final difficulties = ['again', 'good', 'easy'];
   final uri = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTTUPG22pCGbrlYULESZ5FFyYTo9jyFGFEBk1Wx41gZiNvkonYcLPypdPGCZzFxTzywU4hCra4Fmx-b/pubhtml';
-  bool _isSaving = false;
+
+  List<Word> excluded = [];
   String currentVocabulary = '';
   List<String> availableVocabularies = [];
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    loadState();
-    _autoSaveTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      saveState();
-    });
-  }
+  String get version => '0.9.0';
+
+  @override
+  String get prefsKey => 'savedState';
 
   Future<bool> _checkInternetConnection() async {
     return html.window.navigator.onLine ?? false;
   }
 
-  Future<List<String>> getVocabularies() async {
+  Future<List<String>> _getVocabularies() async {
     try {
       if (!await _checkInternetConnection()) {
         setState(() {
-          _appState = AppState.noInternet;
+          appState = AppState.noInternet;
         });
         return [];
       }
@@ -154,43 +134,31 @@ class _VocabularyLearningScreenState extends State<VocabularyLearningScreen> wit
           .toList();
     } catch (e, stackTrace) {
       setState(() {
-        _appState = AppState.error;
-        _error = AppError(e.toString(), stackTrace.toString());
+        appState = AppState.error;
+        error = AppError(e.toString(), stackTrace.toString());
       });
       return [];
     }
   }
 
-  Future<void> loadState() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final savedStateJson = prefs.getString('savedState');
+  @override
+  void loadSavedState(String savedStateJson) {
+    final savedState = SavedState.fromJson(json.decode(savedStateJson));
+    items = savedState.words;
+    currentVocabulary = savedState.currentVocabulary;
+  }
 
-      if (savedStateJson == null) {
-        availableVocabularies = await getVocabularies();
-        if (_appState != AppState.error && _appState != AppState.noInternet) {
-          currentVocabulary = availableVocabularies.first;
-          words = await loadVocabularyWords(currentVocabulary);
-          words.shuffle();
-        }
-      } else {
-        final savedState = SavedState.fromJson(json.decode(savedStateJson));
-        words = savedState.words;
-        currentVocabulary = savedState.currentVocabulary;
-      }
-
-      if (_appState != AppState.error && _appState != AppState.noInternet) {
-        selectNextWord();
-      }
-    } catch (e, stackTrace) {
-      setState(() {
-        _appState = AppState.error;
-        _error = AppError(e.toString(), stackTrace.toString());
-      });
+  @override
+  Future<void> loadInitState() async {
+    availableVocabularies = await _getVocabularies();
+    if (appState != AppState.error && appState != AppState.noInternet) {
+      currentVocabulary = availableVocabularies.first;
+      items = await _loadVocabularyWords(currentVocabulary);
+      items.shuffle();
     }
   }
 
-  Future<List<Word>> loadVocabularyWords(String vocabName) async {
+  Future<List<Word>> _loadVocabularyWords(String vocabName) async {
     final response = await http.get(Uri.parse(uri));
     final document = parser.parse(response.body);
 
@@ -204,108 +172,90 @@ class _VocabularyLearningScreenState extends State<VocabularyLearningScreen> wit
         .skip(1)
         .map((row) {
       final cells = row.getElementsByTagName('td').map((e) => e.text.trim()).toList();
+
       return Word(
         hebrew: cells[4].trim(),
         english: cells[5].trim(),
         phonetic: cells[2].trim(),
       );
-    })
-        .where((word) => word.isNotEmpty())
-        .toList();
+    }).where((word) => word.isNotEmpty()).toList();
   }
 
-  Future<void> saveState() async {
-    if (words.length < 10) return;
-    if (_isSaving) return;
-    _isSaving = true;
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final state = SavedState(
-        words: words,
-        currentVocabulary: currentVocabulary,
-      );
-      await prefs.setString('savedState', json.encode(state.toJson()));
-    } finally {
-      _isSaving = false;
-    }
+  @override
+  SavedState getSavedState() {
+    final state = SavedState(
+      words: items,
+      excluded: excluded,
+      currentVocabulary: currentVocabulary,
+    );
+    return state;
   }
 
-  void selectNextWord() {
-    if (words.isEmpty) return;
-
-    setState(() {
-      _appState = AppState.guess;
-      currentWord = words[0];
-    });
-  }
-
-  void handleShowTranslation() {
-    setState(() {
-      _appState = AppState.assessment;
-    });
-  }
-
-  void handleDifficultySelection(String difficulty) async {
-    if (currentWord == null) return;
+  void _handleDifficultySelection(String difficulty) async {
+    if (currentItem == null) return;
 
     switch (difficulty) {
       case 'again':
-        if (currentWord!.rank < 4) {
-          currentWord!.rank = 1;
+        if (currentItem!.rank < 4) {
+          currentItem!.rank = 1;
         } else  {
-          currentWord!.rank = 2;
+          currentItem!.rank = 2;
         }
         break;
       case 'good':
-        if (currentWord!.rank == 0) {
-          currentWord!.rank = 3;
-        } else if (currentWord!.rank < 4) {
-          currentWord!.rank += 1;
-        } else if (currentWord!.rank > 5) {
-          currentWord!.rank -= 1;
+        if (currentItem!.rank == 0) {
+          currentItem!.rank = 3;
+        } else if (currentItem!.rank < 4) {
+          currentItem!.rank += 1;
+        } else if (currentItem!.rank > 5) {
+          currentItem!.rank -= 1;
         }
         break;
       case 'easy':
-        if (currentWord!.rank == 0) {
-          currentWord!.rank = 8;
-        } else if (currentWord!.rank < 4) {
-          currentWord!.rank += 2;
+        if (currentItem!.rank == 0) {
+          currentItem!.rank = 8;
+        } else if (currentItem!.rank < 4) {
+          currentItem!.rank += 2;
         } else {
-          currentWord!.rank += 1;
+          currentItem!.rank += 1;
         }
         break;
     }
 
-    words.removeAt(0);
-    var index = pow(2, (currentWord!.rank + 1)).toInt();
+    items.removeAt(0);
 
-    if (index >= words.length) {
-      availableVocabularies = await getVocabularies();
-      final nextVocabIndex = availableVocabularies.indexOf(currentVocabulary) + 1;
-      if (nextVocabIndex < availableVocabularies.length) {
-        setState(() {
-          _appState = AppState.loading;
-        });
+    if (currentItem!.rank < 10) {
+      var index = pow(2, (currentItem!.rank + 1)).toInt();
 
-        currentVocabulary = availableVocabularies[nextVocabIndex];
-        final newWords = await loadVocabularyWords(currentVocabulary);
-        newWords.shuffle();
-        words.addAll(newWords);
-        await saveState();
+      if (index >= items.length) {
+        availableVocabularies = await _getVocabularies();
+        final nextVocabIndex = availableVocabularies.indexOf(currentVocabulary) + 1;
+        if (nextVocabIndex < availableVocabularies.length) {
+          setState(() {
+            appState = AppState.loading;
+          });
+
+          currentVocabulary = availableVocabularies[nextVocabIndex];
+          final newWords = await _loadVocabularyWords(currentVocabulary);
+          newWords.shuffle();
+          items.addAll(newWords);
+          await saveState();
+        }
       }
-    }
 
-    if (index < words.length) {
-      words.insert(index, currentWord!);
+      if (index < items.length) {
+        items.insert(index, currentItem!);
+      } else {
+        items.add(currentItem!);
+      }
     } else {
-      words.add(currentWord!);
+      excluded.add(currentItem!);
     }
 
-    selectNextWord();
+    selectNextItem();
   }
 
-  Color getButtonColor(String difficulty) {
+  Color _getButtonColor(String difficulty) {
     switch (difficulty) {
       case 'again': return Colors.orange;
       case 'good': return Colors.lightBlueAccent;
@@ -314,100 +264,9 @@ class _VocabularyLearningScreenState extends State<VocabularyLearningScreen> wit
     }
   }
 
-  Widget _buildErrorScreen() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
-            const SizedBox(height: 16),
-            Text(
-              'An error occurred',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 8),
-            Text(_error?.message ?? 'Unknown error'),
-            if (_error?.stackTrace != null) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: SingleChildScrollView(
-                  child: Text(
-                    _error!.stackTrace!,
-                    style: const TextStyle(fontFamily: 'Courier'),
-                  ),
-                ),
-              ),
-            ],
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: loadState,
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNoInternetScreen() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.wifi_off, size: 64, color: Colors.grey),
-          const SizedBox(height: 16),
-          Text(
-            'No Internet Connection',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: 8),
-          const Text('Please check your connection and try again'),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: loadState,
-            child: const Text('Retry'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoadingScreen() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('Loading vocabulary...'),
-        ],
-      ),
-    );
-  }
-
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: switch (_appState) {
-          AppState.loading => _buildLoadingScreen(),
-          AppState.error => _buildErrorScreen(),
-          AppState.noInternet => _buildNoInternetScreen(),
-          AppState.guess => _buildMainContent(showTranslation: false),
-          AppState.assessment => _buildMainContent(showTranslation: true),
-        },
-      ),
-    );
-  }
-
-  Widget _buildWordCard(bool showTranslation) {
+  Widget buildWordCard() {
+    var showTranslation = appState == AppState.assessment;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -420,22 +279,22 @@ class _VocabularyLearningScreenState extends State<VocabularyLearningScreen> wit
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    (currentWord?.english ?? 'Loading...').replaceAll('; ', '\n'),
+                    (currentItem?.english ?? 'Loading...').replaceAll('; ', '\n'),
                     textScaler: const TextScaler.linear(2),
                     style: lightFont,
                   ),
                   if (showTranslation) ...[
                     const SizedBox(height: 16),
                     Text(
-                      currentWord?.hebrew ?? '',
+                      currentItem?.hebrew ?? '',
                       textScaler: const TextScaler.linear(2.25),
                       style: boldFont,
                       textDirection: TextDirection.rtl,
                     ),
-                    if (currentWord?.phonetic.isNotEmpty ?? false) ...[
+                    if (currentItem?.phonetic.isNotEmpty ?? false) ...[
                       const SizedBox(height: 8),
                       Text(
-                        currentWord?.phonetic ?? '',
+                        currentItem?.phonetic ?? '',
                         textScaler: const TextScaler.linear(1.75),
                         style: italicFont,
                       ),
@@ -446,7 +305,7 @@ class _VocabularyLearningScreenState extends State<VocabularyLearningScreen> wit
             ),
           ),
           if (showTranslation) ...[
-            _buildDictionaryButtons(currentWord?.hebrew ?? ''),
+            _buildDictionaryButtons(currentItem?.hebrew ?? ''),
             const SizedBox(height: 16),
           ],
         ],
@@ -462,17 +321,17 @@ class _VocabularyLearningScreenState extends State<VocabularyLearningScreen> wit
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          iconLink(Icons.list_alt, 'https://www.pealim.com/search/?q=${currentWord!.hebrew}', 24),
+          _iconLink(Icons.list_alt, 'https://www.pealim.com/search/?q=${currentItem!.hebrew}', 24),
           const SizedBox(width: 16),
-          iconLink(Icons.g_translate, 'https://translate.google.com/?sl=iw&tl=en&text=${currentWord!.hebrew}', 24,),
+          _iconLink(Icons.g_translate, 'https://translate.google.com/?sl=iw&tl=en&text=${currentItem!.hebrew}', 24,),
           const SizedBox(width: 16),
-          iconLink(Icons.compare_arrows, 'https://context.reverso.net/translation/hebrew-english/${currentWord!.hebrew}', 30,),
+          _iconLink(Icons.compare_arrows, 'https://context.reverso.net/translation/hebrew-english/${currentItem!.hebrew}', 30,),
         ],
       ),
     );
   }
 
-  IconButton iconLink(IconData icon, String link, double iconSize) {
+  IconButton _iconLink(IconData icon, String link, double iconSize) {
     return IconButton(
       icon: Icon(icon, color: Colors.grey),
       iconSize: iconSize,
@@ -483,7 +342,9 @@ class _VocabularyLearningScreenState extends State<VocabularyLearningScreen> wit
     );
   }
 
-  Widget _buildActionButtons(bool showTranslation) {
+  @override
+  Widget buildActionButtons() {
+    var showTranslation = appState == AppState.assessment;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 24.0),
       child: Column(
@@ -491,7 +352,7 @@ class _VocabularyLearningScreenState extends State<VocabularyLearningScreen> wit
         children: [
           !showTranslation
               ? ElevatedButton(
-            onPressed: () => handleShowTranslation(),
+            onPressed: () => setState(() { appState = AppState.assessment;} ),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.cyan,
               foregroundColor: Colors.black,
@@ -511,9 +372,9 @@ class _VocabularyLearningScreenState extends State<VocabularyLearningScreen> wit
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4.0),
                   child: ElevatedButton(
-                    onPressed: () => handleDifficultySelection(difficulty),
+                    onPressed: () => _handleDifficultySelection(difficulty),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: getButtonColor(difficulty),
+                      backgroundColor: _getButtonColor(difficulty),
                       foregroundColor: Colors.black,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
@@ -531,14 +392,18 @@ class _VocabularyLearningScreenState extends State<VocabularyLearningScreen> wit
     );
   }
 
-  Widget _buildHeader(List<Word> used, List<Word> learned, int points) {
+  @override
+  Widget buildHeader() {
+    var used = items.where((x) => x.rank > 0).toList();
+    var points = used.sum((word) => word.rank) + excluded.sum((word) => word.rank);
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
         Text(currentVocabulary, style: Theme.of(context).textTheme.bodyLarge),
         Row(children: [
           const Icon(Icons.list, size: 30, color: Colors.black45),
-          Text(' ${words.length}', style: Theme.of(context).textTheme.bodyLarge),
+          Text(' ${items.length}', style: Theme.of(context).textTheme.bodyLarge),
         ]),
         Row(children: [
           const Icon(LucideIcons.check, size: 30, color: Colors.green),
@@ -546,7 +411,7 @@ class _VocabularyLearningScreenState extends State<VocabularyLearningScreen> wit
         ]),
         Row(children: [
           const Icon(LucideIcons.checkCheck, size: 30, color: Colors.teal),
-          Text(' ${learned.length}', style: Theme.of(context).textTheme.bodyLarge),
+          Text(' ${excluded.length}', style: Theme.of(context).textTheme.bodyLarge),
         ]),
         Row(children: [
           const Icon(Icons.emoji_events, size: 25, color: Colors.amber),
@@ -554,43 +419,5 @@ class _VocabularyLearningScreenState extends State<VocabularyLearningScreen> wit
         ]),
       ],
     );
-  }
-
-  Widget _buildMainContent({required bool showTranslation}) {
-    var used = words.where((x) => x.rank > 0).toList();
-    var learned = used.where((x) => x.rank > 8).toList();
-    var points = used.sum((word) => word.rank);
-
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        children: [
-          _buildHeader(used, learned, points),
-          Expanded(
-            child: _buildWordCard(showTranslation),
-          ),
-          _buildActionButtons(showTranslation),
-          Text('Version: 0.8.1 • Word rank: ${currentWord?.rank ?? 0}'),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Future<void> dispose() async {
-    _autoSaveTimer?.cancel();
-    await saveState();
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.detached ||
-        state == AppLifecycleState.hidden) {
-      saveState();
-    }
   }
 }
