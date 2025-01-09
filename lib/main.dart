@@ -105,10 +105,10 @@ class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, Vocab
   List<String> availableVocabularies = [];
 
   @override
-  String get version => '0.9.0';
+  String get version => '0.9.2';
 
   @override
-  String get prefsKey => 'savedState';
+  String get prefsKey => 'hebrew_vocabulary';
 
   Future<bool> _checkInternetConnection() async {
     return html.window.navigator.onLine ?? false;
@@ -152,7 +152,7 @@ class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, Vocab
   Future<void> loadInitState() async {
     availableVocabularies = await _getVocabularies();
     if (appState != AppState.error && appState != AppState.noInternet) {
-      currentVocabulary = availableVocabularies.first;
+      currentVocabulary = availableVocabularies[2]; // availableVocabularies.first;
       items = await _loadVocabularyWords(currentVocabulary);
       items.shuffle();
     }

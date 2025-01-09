@@ -86,16 +86,16 @@ abstract class BaseLearningScreenState<T extends LearnableItem, S extends BaseLe
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WebUtilsWeb().initializeLifecycleListeners(() => saveState());
-    loadState();
+    _loadState();
     _autoSaveTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       saveState();
     });
   }
 
-  Future<void> loadState() async {
+  Future<void> _loadState() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final savedStateJson = prefs.getString('savedState');
+      final savedStateJson = prefs.getString(prefsKey);
 
       if (savedStateJson == null) {
         await loadInitState();
@@ -122,7 +122,7 @@ abstract class BaseLearningScreenState<T extends LearnableItem, S extends BaseLe
     try {
       final prefs = await SharedPreferences.getInstance();
       final state = getSavedState();
-      await prefs.setString('savedState', json.encode(state.toJson()));
+      await prefs.setString(prefsKey, json.encode(state.toJson()));
     } finally {
       _isSaving = false;
     }
@@ -136,7 +136,7 @@ abstract class BaseLearningScreenState<T extends LearnableItem, S extends BaseLe
     });
   }
 
-  Widget buildErrorScreen() {
+  Widget _buildErrorScreen() {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -157,14 +157,14 @@ abstract class BaseLearningScreenState<T extends LearnableItem, S extends BaseLe
               ),
             ],
             const SizedBox(height: 24),
-            ElevatedButton(onPressed: loadState, child: const Text('Retry'),),
+            ElevatedButton(onPressed: _loadState, child: const Text('Retry'),),
           ],
         ),
       ),
     );
   }
 
-  Widget buildNoInternetScreen() {
+  Widget _buildNoInternetScreen() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -175,13 +175,13 @@ abstract class BaseLearningScreenState<T extends LearnableItem, S extends BaseLe
           const SizedBox(height: 8),
           const Text('Please check your connection and try again'),
           const SizedBox(height: 24),
-          ElevatedButton(onPressed: loadState, child: const Text('Retry'),),
+          ElevatedButton(onPressed: _loadState, child: const Text('Retry'),),
         ],
       ),
     );
   }
 
-  Widget buildLoadingScreen() {
+  Widget _buildLoadingScreen() {
     return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -199,9 +199,9 @@ abstract class BaseLearningScreenState<T extends LearnableItem, S extends BaseLe
     return Scaffold(
       body: SafeArea(
         child: switch (appState) {
-          AppState.loading => buildLoadingScreen(),
-          AppState.error => buildErrorScreen(),
-          AppState.noInternet => buildNoInternetScreen(),
+          AppState.loading => _buildLoadingScreen(),
+          AppState.error => _buildErrorScreen(),
+          AppState.noInternet => _buildNoInternetScreen(),
           AppState.guess => _buildMainContent(),
           AppState.assessment => _buildMainContent(),
         },
