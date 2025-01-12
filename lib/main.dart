@@ -105,7 +105,7 @@ class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, Vocab
   List<String> availableVocabularies = [];
 
   @override
-  String get version => '0.9.2';
+  String get version => '0.9.4';
 
   @override
   String get prefsKey => 'hebrew_vocabulary';
@@ -145,6 +145,7 @@ class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, Vocab
   void loadSavedState(String savedStateJson) {
     final savedState = SavedState.fromJson(json.decode(savedStateJson));
     items = savedState.words;
+    excluded = savedState.excluded;
     currentVocabulary = savedState.currentVocabulary;
   }
 
@@ -225,7 +226,8 @@ class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, Vocab
     items.removeAt(0);
 
     if (currentItem!.rank < 10) {
-      var index = pow(2, (currentItem!.rank + 1)).toInt();
+      var offset = currentItem!.rank < 6 ? 0 : Random().nextDouble();
+      var index =  pow(2, currentItem!.rank + 1 + offset).toInt();
 
       if (index >= items.length) {
         availableVocabularies = await _getVocabularies();
