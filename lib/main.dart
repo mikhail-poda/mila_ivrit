@@ -100,12 +100,13 @@ class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, Vocab
   final difficulties = ['again', 'good', 'easy'];
   final uri = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTTUPG22pCGbrlYULESZ5FFyYTo9jyFGFEBk1Wx41gZiNvkonYcLPypdPGCZzFxTzywU4hCra4Fmx-b/pubhtml';
 
+  int lastIndex = -1;
   List<Word> excluded = [];
   String currentVocabulary = '';
   List<String> availableVocabularies = [];
 
   @override
-  String get version => '0.9.4';
+  String get version => '0.9.6';
 
   @override
   String get prefsKey => 'hebrew_vocabulary';
@@ -153,7 +154,7 @@ class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, Vocab
   Future<void> loadInitState() async {
     availableVocabularies = await _getVocabularies();
     if (appState != AppState.error && appState != AppState.noInternet) {
-      currentVocabulary = availableVocabularies[2]; // availableVocabularies.first;
+      currentVocabulary = availableVocabularies.first; // availableVocabularies[2]; //
       items = await _loadVocabularyWords(currentVocabulary);
       items.shuffle();
     }
@@ -247,8 +248,10 @@ class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, Vocab
 
       if (index < items.length) {
         items.insert(index, currentItem!);
+        lastIndex = index;
       } else {
         items.add(currentItem!);
+        lastIndex = items.length;
       }
     } else {
       excluded.add(currentItem!);
@@ -352,52 +355,60 @@ class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, Vocab
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          !showTranslation
-              ? ElevatedButton(
-            onPressed: () => setState(() { appState = AppState.assessment;} ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.cyan,
-              foregroundColor: Colors.black,
-              padding: const EdgeInsets.symmetric(
-                vertical: 16,
-                horizontal: 32,
-              ),
-            ),
-            child: const Text(
-              '            Show            ',
-              style: TextStyle(fontSize: 20),
-            ),
-          )
-              : Row(
-            children: difficulties.map((difficulty) {
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                  child: ElevatedButton(
-                    onPressed: () => _handleDifficultySelection(difficulty),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _getButtonColor(difficulty),
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: Text(
-                      difficulty,
-                      style: const TextStyle(fontSize: 20),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
+          !showTranslation ?
+          _buildShowButton() :
+          Row(children: difficulties.map((difficulty) => _buildDifficultyButton(difficulty)).toList())
         ],
       ),
     );
   }
 
+  Expanded _buildDifficultyButton(String difficulty) {
+    return Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                child: ElevatedButton(
+                  onPressed: () => _handleDifficultySelection(difficulty),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _getButtonColor(difficulty),
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: Text(
+                    difficulty,
+                    style: const TextStyle(fontSize: 20),
+                  ),
+                ),
+              ),
+            );
+  }
+
+  Widget _buildShowButton() {
+    return  GestureDetector(
+        onHorizontalDragEnd: (details) => _undoLastAssessment(details),
+        child: ElevatedButton(
+          onPressed: () => setState(() { appState = AppState.assessment;} ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.cyan,
+            foregroundColor: Colors.black,
+            padding: const EdgeInsets.symmetric(
+              vertical: 16,
+              horizontal: 32,
+            ),
+          ),
+          child: const Text(
+            '            Show            ',
+            style: TextStyle(fontSize: 20),
+          ),
+        )
+    );
+  }
+
   @override
   Widget buildHeader() {
+    var total = items.length;
     var used = items.where((x) => x.rank > 0).toList();
-    var points = used.sum((word) => word.rank) + excluded.sum((word) => word.rank);
+    var known = used.where((x) => x.rank >= 8).toList();
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -405,21 +416,33 @@ class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, Vocab
         Text(currentVocabulary, style: Theme.of(context).textTheme.bodyLarge),
         Row(children: [
           const Icon(Icons.list, size: 30, color: Colors.black45),
-          Text(' ${items.length}', style: Theme.of(context).textTheme.bodyLarge),
+          Text(' ${total - used.length}', style: Theme.of(context).textTheme.bodyLarge),
         ]),
         Row(children: [
           const Icon(LucideIcons.check, size: 30, color: Colors.green),
-          Text(' ${used.length}', style: Theme.of(context).textTheme.bodyLarge),
+          Text(' ${used.length - known.length}', style: Theme.of(context).textTheme.bodyLarge),
         ]),
         Row(children: [
           const Icon(LucideIcons.checkCheck, size: 30, color: Colors.teal),
-          Text(' ${excluded.length}', style: Theme.of(context).textTheme.bodyLarge),
+          Text(' ${known.length}', style: Theme.of(context).textTheme.bodyLarge),
         ]),
         Row(children: [
           const Icon(Icons.emoji_events, size: 25, color: Colors.amber),
-          Text(' $points', style: Theme.of(context).textTheme.bodyLarge),
+          Text(' ${excluded.length}', style: Theme.of(context).textTheme.bodyLarge),
         ]),
       ],
     );
+  }
+
+  void _undoLastAssessment(DragEndDetails details) {
+    if (details.primaryVelocity == null && details.primaryVelocity! < 500) return;
+    if (items.isEmpty) return;
+    if (lastIndex < 0) return;
+
+    var item = items[lastIndex];
+    items.removeAt(lastIndex);
+    items.insert(0, item);
+    lastIndex = -1;
+    selectNextItem();
   }
 }
