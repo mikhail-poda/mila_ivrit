@@ -80,6 +80,7 @@ abstract class BaseLearningScreenState<T extends LearnableItem, S extends BaseLe
   Widget buildHeader();
   Widget buildWordCard();
   Widget buildActionButtons();
+  Future<void> syncWithSource();
 
   @override
   void initState() {
@@ -202,10 +203,19 @@ abstract class BaseLearningScreenState<T extends LearnableItem, S extends BaseLe
           AppState.loading => _buildLoadingScreen(),
           AppState.error => _buildErrorScreen(),
           AppState.noInternet => _buildNoInternetScreen(),
-          AppState.guess => _buildMainContent(),
+          AppState.guess => _buildMainRefreshableContent(),
           AppState.assessment => _buildMainContent(),
         },
       ),
+    );
+  }
+
+  Widget _buildMainRefreshableContent() {
+    return RefreshIndicator(
+      onRefresh: () async {
+        await syncWithSource();
+      },
+      child: _buildMainContent(),
     );
   }
 

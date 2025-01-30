@@ -1,7 +1,7 @@
 import 'dart:math';
 import 'dart:html' as html;
-import 'package:darq/darq.dart';
 import 'package:flutter/material.dart';
+import 'web_tts.dart';
 import 'package:html/parser.dart' as parser;
 import 'package:http/http.dart' as http;
 import 'package:lucide_icons/lucide_icons.dart';
@@ -77,16 +77,22 @@ class SavedState implements BaseSavedState {
 
   @override
   Map<String, dynamic> toJson() => {
-    'words': words.map((w) => w.toJson()).toList(),
-    'excluded': excluded.map((w) => w.toJson()).toList(),
-    'currentVocabulary': currentVocabulary
-  };
+        'words': words.map((w) => w.toJson()).toList(),
+        'excluded': excluded.map((w) => w.toJson()).toList(),
+        'currentVocabulary': currentVocabulary
+      };
 
   factory SavedState.fromJson(Map<String, dynamic> json) => SavedState(
-    words: (json['words'] as List).map((w) => Word.fromJson(w)).where((word) => word.isNotEmpty()).toList(),
-    excluded: (json['excluded'] as List).map((w) => Word.fromJson(w)).where((word) => word.isNotEmpty()).toList(),
-    currentVocabulary: json['currentVocabulary'],
-  );
+        words: (json['words'] as List)
+            .map((w) => Word.fromJson(w))
+            .where((word) => word.isNotEmpty())
+            .toList(),
+        excluded: (json['excluded'] as List)
+            .map((w) => Word.fromJson(w))
+            .where((word) => word.isNotEmpty())
+            .toList(),
+        currentVocabulary: json['currentVocabulary'],
+      );
 }
 
 class VocabularyLearningScreen extends BaseLearningScreen<Word> {
@@ -106,13 +112,60 @@ class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, Vocab
   List<String> availableVocabularies = [];
 
   @override
-  String get version => '0.9.6';
+  String get version => '1.0.0';
 
   @override
   String get prefsKey => 'hebrew_vocabulary';
 
+  void _playHebrewWord(String hebrewWord) {
+    try {
+      WebTTS.speak(hebrewWord);
+    } catch (e) {}
+  }
+
+  Future<Map<String, Word>> _fetchAndCombineSourceMap() async {
+    final a2Words = await _loadVocabularyWords('A2');
+    final b1Words = await _loadVocabularyWords('B1');
+    final combinedWords = [...a2Words, ...b1Words];
+
+    final sourceMap = <String, Word>{};
+    for (final word in combinedWords) {
+      final key = '${word.english}-${word.hebrew}';
+      sourceMap[key] = word;
+    }
+
+    return sourceMap;
+  }
+
+  Future<void> _syncWithSourceMap() async {
+    final sourceMap = await _fetchAndCombineSourceMap();
+
+    items.removeWhere((word) => removeWhere(word, sourceMap));
+    excluded.removeWhere((word) => removeWhere(word, sourceMap));
+
+    items.addAll(sourceMap.values);
+    await saveState();
+  }
+
+  bool removeWhere(Word word, Map<String, Word> sourceMap) {
+    final key = '${word.english}-${word.hebrew}';
+    if (sourceMap.containsKey(key)) {
+      sourceMap.remove(key);
+      return false;
+    } else {
+      return true;
+    }
+  }
+
   Future<bool> _checkInternetConnection() async {
     return html.window.navigator.onLine ?? false;
+  }
+
+  @override
+  Future<void> syncWithSource() async {
+    await _syncWithSourceMap();
+    lastIndex = -1;
+    selectNextItem();
   }
 
   Future<List<String>> _getVocabularies() async {
@@ -173,14 +226,14 @@ class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, Vocab
         .getElementsByTagName('tr')
         .skip(1)
         .map((row) {
-      final cells = row.getElementsByTagName('td').map((e) => e.text.trim()).toList();
+          final cells = row.getElementsByTagName('td').map((e) => e.text.trim()).toList();
 
-      return Word(
-        hebrew: cells[4].trim(),
-        english: cells[5].trim(),
-        phonetic: cells[2].trim(),
-      );
-    }).where((word) => word.isNotEmpty()).toList();
+          return Word(
+            hebrew: cells[4].trim(),
+            english: cells[5].trim(),
+            phonetic: cells[2].trim(),
+          );
+        }).where((word) => word.isNotEmpty()).toList();
   }
 
   @override
@@ -200,7 +253,7 @@ class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, Vocab
       case 'again':
         if (currentItem!.rank < 4) {
           currentItem!.rank = 1;
-        } else  {
+        } else {
           currentItem!.rank = 2;
         }
         break;
@@ -215,7 +268,11 @@ class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, Vocab
         break;
       case 'easy':
         if (currentItem!.rank == 0) {
-          currentItem!.rank = 8;
+          if (currentVocabulary == 'A0' || currentVocabulary == 'A1') {
+            currentItem!.rank = 10;
+          } else {
+            currentItem!.rank = 8;
+          }
         } else if (currentItem!.rank < 4) {
           currentItem!.rank += 2;
         } else {
@@ -228,7 +285,7 @@ class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, Vocab
 
     if (currentItem!.rank < 10) {
       var offset = currentItem!.rank < 6 ? 0 : Random().nextDouble();
-      var index =  pow(2, currentItem!.rank + 1 + offset).toInt();
+      var index = pow(2, currentItem!.rank + offset).toInt();
 
       if (index >= items.length) {
         availableVocabularies = await _getVocabularies();
@@ -255,6 +312,7 @@ class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, Vocab
       }
     } else {
       excluded.add(currentItem!);
+      lastIndex = -1;
     }
 
     selectNextItem();
@@ -326,11 +384,15 @@ class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, Vocab
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          _iconLink(Icons.search, 'https://www.google.com/search?q=${currentItem!.hebrew}', 24),
+          const SizedBox(width: 16),
           _iconLink(Icons.list_alt, 'https://www.pealim.com/search/?q=${currentItem!.hebrew}', 24),
           const SizedBox(width: 16),
           _iconLink(Icons.g_translate, 'https://translate.google.com/?sl=iw&tl=en&text=${currentItem!.hebrew}', 24,),
           const SizedBox(width: 16),
           _iconLink(Icons.compare_arrows, 'https://context.reverso.net/translation/hebrew-english/${currentItem!.hebrew}', 30,),
+          const SizedBox(width: 16),
+          _playHebrewWordIcon(currentItem!.hebrew),
         ],
       ),
     );
@@ -347,6 +409,18 @@ class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, Vocab
     );
   }
 
+  _playHebrewWordIcon(String hebrewWord) {
+    return IconButton(
+      icon: Icon(Icons.volume_up, color: Colors.grey),
+      iconSize: 24,
+      onPressed: () {
+        if (hebrewWord != null) {
+          _playHebrewWord(hebrewWord);
+        }
+      },
+    );
+  }
+
   @override
   Widget buildActionButtons() {
     var showTranslation = appState == AppState.assessment;
@@ -355,9 +429,9 @@ class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, Vocab
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          !showTranslation ?
-          _buildShowButton() :
-          Row(children: difficulties.map((difficulty) => _buildDifficultyButton(difficulty)).toList())
+          !showTranslation
+              ? _buildShowButton()
+              : Row(children: difficulties.map((difficulty) => _buildDifficultyButton(difficulty)).toList())
         ],
       ),
     );
@@ -365,43 +439,39 @@ class _VocabularyLearningScreenState extends BaseLearningScreenState<Word, Vocab
 
   Expanded _buildDifficultyButton(String difficulty) {
     return Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                child: ElevatedButton(
-                  onPressed: () => _handleDifficultySelection(difficulty),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _getButtonColor(difficulty),
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: Text(
-                    difficulty,
-                    style: const TextStyle(fontSize: 20),
-                  ),
-                ),
-              ),
-            );
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+        child: ElevatedButton(
+          onPressed: () => _handleDifficultySelection(difficulty),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _getButtonColor(difficulty),
+            foregroundColor: Colors.black,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+          ),
+          child: Text(
+            difficulty,
+            style: const TextStyle(fontSize: 20),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildShowButton() {
-    return  GestureDetector(
+    return GestureDetector(
         onHorizontalDragEnd: (details) => _undoLastAssessment(details),
         child: ElevatedButton(
-          onPressed: () => setState(() { appState = AppState.assessment;} ),
+          onPressed: () => setState(() {
+            appState = AppState.assessment;
+          }),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.cyan,
             foregroundColor: Colors.black,
-            padding: const EdgeInsets.symmetric(
-              vertical: 16,
-              horizontal: 32,
-            ),
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 32,),
           ),
-          child: const Text(
-            '            Show            ',
-            style: TextStyle(fontSize: 20),
+          child: const Text('            Show            ', style: TextStyle(fontSize: 20),
           ),
-        )
-    );
+        ));
   }
 
   @override
