@@ -265,7 +265,7 @@ abstract class BaseLearningScreenState<T extends LearnableItem, S extends BaseLe
             child: buildWordCard(),
           ),
           buildActionButtons(),
-          Text('Version: $version • Word rank: ${currentItem?.rank ?? 0}', textScaler: const TextScaler.linear(1.25)),
+          Text('Version: $version • Word rank: ${currentItem?.rank ?? 0}', style: Theme.of(context).textTheme.bodyLarge,),
         ],
       ),
     );

@@ -30,7 +30,7 @@ class VocabularyLearningScreenState
   List<String>? _availableVocabularies;
 
   @override
-  String get version => '1.0.2';
+  String get version => '1.0.4';
 
   @override
   String get prefsKey => 'hebrew_vocabulary';
@@ -155,7 +155,7 @@ class VocabularyLearningScreenState
         currentVocabulary: _currentVocabulary);
   }
 
-  Future<void> tryGoNextLevel() async {
+  Future<void> _tryGoNextLevel() async {
     if (items.any((word) => word.rank > 0)) return;
     _excluded.addAll(items);
     items.clear();
@@ -166,6 +166,39 @@ class VocabularyLearningScreenState
   void _handleDifficultySelection(String difficulty) async {
     if (currentItem == null) return;
 
+    _difficultyMap(difficulty);
+
+    items.removeAt(0);
+
+    if (currentItem!.rank < _finalRank) {
+      var offset =
+          currentItem!.rank < (_middleRank + 2) ? 0 : Random().nextDouble();
+      var index = 1 + pow(2, currentItem!.rank + offset).toInt();
+
+      if (index >= items.length) {
+        await _tryAddVocabulary();
+      }
+
+      if (index < items.length) {
+        items.insert(index, currentItem!);
+        _lastIndex = index;
+      } else {
+        items.add(currentItem!);
+        _lastIndex = items.length;
+      }
+    } else {
+      _excluded.add(currentItem!);
+      _lastIndex = -2;
+    }
+
+    if (items.isEmpty) {
+      await _tryAddVocabulary();
+    }
+
+    selectNextItem();
+  }
+
+  void _difficultyMap(String difficulty) {
     switch (difficulty) {
       case 'again':
         if (currentItem!.rank < _middleRank) {
@@ -193,35 +226,6 @@ class VocabularyLearningScreenState
         }
         break;
     }
-
-    items.removeAt(0);
-
-    if (currentItem!.rank < _finalRank) {
-      var offset =
-          currentItem!.rank < (_middleRank + 2) ? 0 : Random().nextDouble();
-      var index = pow(2, currentItem!.rank + offset).toInt();
-
-      if (index >= items.length) {
-        await _tryAddVocabulary();
-      }
-
-      if (index < items.length) {
-        items.insert(index, currentItem!);
-        _lastIndex = index;
-      } else {
-        items.add(currentItem!);
-        _lastIndex = items.length;
-      }
-    } else {
-      _excluded.add(currentItem!);
-      _lastIndex = -2;
-    }
-
-    if (items.isEmpty) {
-      await _tryAddVocabulary();
-    }
-
-    selectNextItem();
   }
 
   Future<void> _tryAddVocabulary() async {
@@ -232,11 +236,15 @@ class VocabularyLearningScreenState
       });
       await _addVocabulary(_vocabularyIndex + 1);
       await saveState();
+    } else if ( items.isEmpty && _excluded.isNotEmpty ) {
+      items.addAll(_excluded);
+      _excluded.clear();
+      await saveState();
     }
   }
 
   void _undoLastAssessment(DragEndDetails details) {
-    if (details.primaryVelocity == null && details.primaryVelocity! < 500) {
+    if (details.primaryVelocity == null || details.primaryVelocity! < 500) {
       return;
     }
     if (items.isEmpty) return;
@@ -410,7 +418,7 @@ class VocabularyLearningScreenState
 
   Widget _buildShowButton() {
     return GestureDetector(
-        onHorizontalDragEnd: (details) => _undoLastAssessment(details),
+        onVerticalDragEnd: (details) => _undoLastAssessment(details),
         child: ElevatedButton(
           onPressed: () => setState(() {
             appState = AppState.assessment;
@@ -440,7 +448,7 @@ class VocabularyLearningScreenState
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
         GestureDetector(
-          onTap: () => tryGoNextLevel(),
+          onTap: () => _tryGoNextLevel(),
           child: Text(_currentVocabulary,
               style: Theme.of(context).textTheme.bodyLarge),
         ),
