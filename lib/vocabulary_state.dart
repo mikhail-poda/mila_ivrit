@@ -12,8 +12,9 @@ import 'main.dart';
 import 'web_tts.dart';
 
 const boldFont = TextStyle(fontWeight: FontWeight.bold);
-const lightFont = TextStyle(fontWeight: FontWeight.w300 );
-const italicFont = TextStyle(fontWeight: FontWeight.w300, fontStyle: FontStyle.italic);
+const lightFont = TextStyle(fontWeight: FontWeight.w300);
+const italicFont =
+    TextStyle(fontWeight: FontWeight.w300, fontStyle: FontStyle.italic);
 
 class VocabularyLearningScreenState
     extends BaseLearningScreenState<Word, VocabularyLearningScreen> {
@@ -30,7 +31,7 @@ class VocabularyLearningScreenState
   List<String>? _availableVocabularies;
 
   @override
-  String get version => '1.0.4';
+  String get version => '1.0.5';
 
   @override
   String get prefsKey => 'hebrew_vocabulary';
@@ -51,7 +52,8 @@ class VocabularyLearningScreenState
     _currentVocabulary = availableVocabularies[vocabularyIndex];
     _vocabularyIndex = vocabularyIndex;
 
-    var vocabulary = await _vocabularyService.getVocabularyWords(vocabularyIndex);
+    var vocabulary =
+        await _vocabularyService.getVocabularyWords(vocabularyIndex);
     vocabulary.shuffle();
     vocabulary.sort((a, b) => a.hebrew.length.compareTo(b.hebrew.length));
 
@@ -120,8 +122,10 @@ class VocabularyLearningScreenState
       ..._excluded.map((w) => '${w.english}-${w.hebrew}')
     };
 
-    items.removeWhere((word) => !sourceKeys.contains('${word.english}-${word.hebrew}'));
-    _excluded.removeWhere((word) => !sourceKeys.contains('${word.english}-${word.hebrew}'));
+    items.removeWhere(
+        (word) => !sourceKeys.contains('${word.english}-${word.hebrew}'));
+    _excluded.removeWhere(
+        (word) => !sourceKeys.contains('${word.english}-${word.hebrew}'));
 
     for (var word in items) {
       word.phonetic = sourceMap['${word.english}-${word.hebrew}']!.phonetic;
@@ -171,8 +175,7 @@ class VocabularyLearningScreenState
     items.removeAt(0);
 
     if (currentItem!.rank < _finalRank) {
-      var offset =
-          currentItem!.rank < (_middleRank + 2) ? 0 : Random().nextDouble();
+      var offset = Random().nextDouble() / 2;
       var index = 1 + pow(2, currentItem!.rank + offset).toInt();
 
       if (index >= items.length) {
@@ -212,7 +215,7 @@ class VocabularyLearningScreenState
           currentItem!.rank = _middleRank;
         } else if (currentItem!.rank < _middleRank - 1) {
           currentItem!.rank += 1;
-        } else if (currentItem!.rank > _middleRank) {
+        } else if (currentItem!.rank > _middleRank + 1) {
           currentItem!.rank -= 1;
         }
         break;
@@ -236,32 +239,36 @@ class VocabularyLearningScreenState
       });
       await _addVocabulary(_vocabularyIndex + 1);
       await saveState();
-    } else if ( items.isEmpty && _excluded.isNotEmpty ) {
+    } else if (items.isEmpty && _excluded.isNotEmpty) {
       items.addAll(_excluded);
       _excluded.clear();
+
+      for (var item in items) {
+        item.rank = _middleRank;
+      }
+
       await saveState();
     }
   }
 
   void _undoLastAssessment(DragEndDetails details) {
-    if (details.primaryVelocity == null || details.primaryVelocity! < 500) {
-      return;
-    }
-    if (items.isEmpty) return;
+    if (details.primaryVelocity! > 300) {
+      if (items.isEmpty) return;
 
-    if (_lastIndex > 0) {
-      var item = items[_lastIndex];
-      items.removeAt(_lastIndex);
-      items.insert(0, item);
-    } else if (_lastIndex == -2) {
-      var ind = _excluded.length - 1;
-      var item = _excluded[ind];
-      _excluded.removeAt(ind);
-      items.insert(0, item);
-    }
+      if (_lastIndex > 0) {
+        var item = items[_lastIndex];
+        items.removeAt(_lastIndex);
+        items.insert(0, item);
+      } else if (_lastIndex == -2) {
+        var ind = _excluded.length - 1;
+        var item = _excluded[ind];
+        _excluded.removeAt(ind);
+        items.insert(0, item);
+      }
 
-    _lastIndex = -1;
-    selectNextItem();
+      _lastIndex = -1;
+      selectNextItem();
+    }
   }
 
   Color _getButtonColor(String difficulty) {
@@ -418,7 +425,7 @@ class VocabularyLearningScreenState
 
   Widget _buildShowButton() {
     return GestureDetector(
-        onVerticalDragEnd: (details) => _undoLastAssessment(details),
+        onHorizontalDragEnd: (details) => _undoLastAssessment(details),
         child: ElevatedButton(
           onPressed: () => setState(() {
             appState = AppState.assessment;
