@@ -3,5 +3,5 @@
 [https://mila-ivrit.web.app/](https://mila-ivrit.web.app/)
 
 This app is optimized for mobile.
- 
-![image](https://github.com/user-attachments/assets/83184679-d7cd-4ab1-94bf-992117b3d82f)
+
+![mila-ivrit](https://github.com/user-attachments/assets/f13ebe4a-5501-47a3-bfd0-3e78aca5e17f)
