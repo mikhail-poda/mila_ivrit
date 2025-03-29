@@ -169,9 +169,7 @@ class VocabularyLearningScreenState
 
   void _handleDifficultySelection(String difficulty) async {
     if (currentItem == null) return;
-
     _difficultyMap(difficulty);
-
     items.removeAt(0);
 
     if (currentItem!.rank < _finalRank) {
@@ -187,7 +185,7 @@ class VocabularyLearningScreenState
         _lastIndex = index;
       } else {
         items.add(currentItem!);
-        _lastIndex = items.length;
+        _lastIndex = items.length - 1;
       }
     } else {
       _excluded.add(currentItem!);
