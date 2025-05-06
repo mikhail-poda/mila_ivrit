@@ -20,8 +20,11 @@ class VocabularyLearningScreenState
     extends BaseLearningScreenState<Word, VocabularyLearningScreen> {
   final _difficulties = ['again', 'good', 'easy'];
   final _finalRank = 11;
-  final _middleRank = 5;
   final _vocabularyService = VocabularyService();
+
+  // Define min and max difficulty values
+  final double _minDifficulty = 1.0;
+  final double _maxDifficulty = 11.0;
 
   int _lastIndex = -1;
   int _vocabularyIndex = 0;
@@ -30,8 +33,11 @@ class VocabularyLearningScreenState
   List<Word> _excluded = [];
   List<String>? _availableVocabularies;
 
+  // Reference to track the button row width
+  final GlobalKey _buttonRowKey = GlobalKey();
+
   @override
-  String get version => '1.0.5';
+  String get version => '1.1.4';
 
   @override
   String get prefsKey => 'hebrew_vocabulary';
@@ -167,14 +173,29 @@ class VocabularyLearningScreenState
     selectNextItem();
   }
 
-  void _handleDifficultySelection(String difficulty) async {
+  // New method to handle difficulty based on position
+  void _handleDifficultySelection(double relativeX) async {
+    // Map to difficulty range (1.0 to 11.0)
+    final double difficulty = _minDifficulty +
+        pow(relativeX, 1.67) * (_maxDifficulty - _minDifficulty);
+
     if (currentItem == null) return;
-    _difficultyMap(difficulty);
+
+    // Calculate new rank based on the given algorithm
+    var newRank = (currentItem!.rank == 0)
+        ? difficulty
+        : (difficulty < currentItem!.rank)
+            ? difficulty
+            : (difficulty + currentItem!.rank) / 2;
+
+    // add a small amount to be sure to reach _finalRank
+    currentItem!.rank = (newRank + 0.25).round();
+
+    // Handle word placement in deck
     items.removeAt(0);
 
     if (currentItem!.rank < _finalRank) {
-      var offset = Random().nextDouble() / 2;
-      var index = 1 + pow(2, currentItem!.rank + offset).toInt();
+      var index = 1 + pow(2, newRank).round();
 
       if (index >= items.length) {
         await _tryAddVocabulary();
@@ -199,36 +220,6 @@ class VocabularyLearningScreenState
     selectNextItem();
   }
 
-  void _difficultyMap(String difficulty) {
-    switch (difficulty) {
-      case 'again':
-        if (currentItem!.rank < _middleRank) {
-          currentItem!.rank = 1;
-        } else {
-          currentItem!.rank = 3;
-        }
-        break;
-      case 'good':
-        if (currentItem!.rank == 0) {
-          currentItem!.rank = _middleRank;
-        } else if (currentItem!.rank < _middleRank - 1) {
-          currentItem!.rank += 1;
-        } else if (currentItem!.rank > _middleRank + 1) {
-          currentItem!.rank -= 1;
-        }
-        break;
-      case 'easy':
-        if (currentItem!.rank == 0) {
-          currentItem!.rank = _finalRank;
-        } else if (currentItem!.rank < _middleRank) {
-          currentItem!.rank += 2;
-        } else {
-          currentItem!.rank += 1;
-        }
-        break;
-    }
-  }
-
   Future<void> _tryAddVocabulary() async {
     final vocabularies = await _ensureVocabulariesLoaded();
     if (_vocabularyIndex + 1 < vocabularies.length) {
@@ -242,7 +233,7 @@ class VocabularyLearningScreenState
       _excluded.clear();
 
       for (var item in items) {
-        item.rank = _middleRank;
+        item.rank = 0;
       }
 
       await saveState();
@@ -390,27 +381,66 @@ class VocabularyLearningScreenState
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          !showTranslation
-              ? _buildShowButton()
-              : Row(
-                  children: _difficulties
-                      .map((difficulty) => _buildDifficultyButton(difficulty))
-                      .toList())
+          !showTranslation ? _buildShowButton() : _buildDifficultyButtonArea()
         ],
       ),
     );
   }
 
+// New widget for the difficulty button area - captures the entire area
+  Widget _buildDifficultyButtonArea() {
+    return SizedBox(
+      key: _buttonRowKey,
+      width: double.infinity, // Ensure full width capture
+      child: Stack(
+        children: [
+          // Visual button row - purely decorative
+          Row(
+            children: _difficulties
+                .map((difficulty) => _buildDifficultyButton(difficulty))
+                .toList(),
+          ),
+          // Invisible overlay to capture taps across the entire area including gaps
+          Positioned.fill(
+            child: GestureDetector(
+              onTapUp: (details) {
+                // Get the RenderBox of the button area
+                final RenderBox box = _buttonRowKey.currentContext!
+                    .findRenderObject() as RenderBox;
+                final Offset local = box.globalToLocal(details.globalPosition);
+
+                // Calculate the relative position (0.0 to 1.0)
+                final double relativeX = local.dx / box.size.width;
+
+                // Handle the difficulty selection
+                _handleDifficultySelection(relativeX);
+              },
+              // Make the overlay transparent but clickable
+              child: Container(
+                color: Colors.transparent,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Same appearance but no onPressed - handled by parent GestureDetector
   Expanded _buildDifficultyButton(String difficulty) {
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4.0),
         child: ElevatedButton(
-          onPressed: () => _handleDifficultySelection(difficulty),
+          onPressed: null, // Disable direct button press
           style: ElevatedButton.styleFrom(
             backgroundColor: _getButtonColor(difficulty),
             foregroundColor: Colors.black,
             padding: const EdgeInsets.symmetric(vertical: 16),
+            disabledBackgroundColor: _getButtonColor(difficulty),
+            // Keep color when disabled
+            disabledForegroundColor:
+                Colors.black, // Keep text color when disabled
           ),
           child: Text(
             difficulty,
@@ -436,7 +466,7 @@ class VocabularyLearningScreenState
               horizontal: 32,
             ),
           ),
-          child: Text(
+          child: const Text(
             '            Show            ',
             style: TextStyle(fontSize: 20),
           ),
