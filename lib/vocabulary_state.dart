@@ -20,6 +20,7 @@ class VocabularyLearningScreenState
     extends BaseLearningScreenState<Word, VocabularyLearningScreen> {
   final _difficulties = ['again', 'good', 'easy'];
   final _finalRank = 11;
+  final _midRank = 7;
   final _vocabularyService = VocabularyService();
 
   // Define min and max difficulty values
@@ -37,7 +38,7 @@ class VocabularyLearningScreenState
   final GlobalKey _buttonRowKey = GlobalKey();
 
   @override
-  String get version => '1.1.4';
+  String get version => '1.2.0';
 
   @override
   String get prefsKey => 'hebrew_vocabulary';
@@ -177,7 +178,7 @@ class VocabularyLearningScreenState
   void _handleDifficultySelection(double relativeX) async {
     // Map to difficulty range (1.0 to 11.0)
     final double difficulty = _minDifficulty +
-        pow(relativeX, 1.67) * (_maxDifficulty - _minDifficulty);
+        pow(relativeX, 1.33) * (_maxDifficulty - _minDifficulty);
 
     if (currentItem == null) return;
 
@@ -286,30 +287,10 @@ class VocabularyLearningScreenState
               padding: const EdgeInsets.all(24.0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    currentItem!.english.replaceAll('; ', '\n'),
-                    textScaler: const TextScaler.linear(2),
-                    style: lightFont,
-                  ),
-                  if (showTranslation) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      currentItem!.hebrew,
-                      textScaler: const TextScaler.linear(2.25),
-                      style: boldFont,
-                      textDirection: TextDirection.rtl,
-                    ),
-                    if (currentItem?.phonetic.isNotEmpty ?? false) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        currentItem?.phonetic ?? '',
-                        textScaler: const TextScaler.linear(1.75),
-                        style: italicFont,
-                      ),
-                    ],
-                  ],
-                ],
+                children:
+                    (currentItem!.rank < _midRank || currentItem!.rank == 0)
+                        ? getL21Text(showTranslation)
+                        : getL12Text(showTranslation),
               ),
             ),
           ),
@@ -320,6 +301,50 @@ class VocabularyLearningScreenState
         ],
       ),
     );
+  }
+
+  List<Widget> getL12Text(bool showTranslation) {
+    return [
+      Text(
+        currentItem!.english.replaceAll('; ', '\n'),
+        textScaler: const TextScaler.linear(2),
+        style: lightFont,
+      ),
+      const SizedBox(height: 16),
+      if (showTranslation) ...getHebrew(),
+    ];
+  }
+
+  List<Widget> getL21Text(bool showTranslation) {
+    return [
+      ...getHebrew(),
+      const SizedBox(height: 16),
+      if (showTranslation)
+        Text(
+          currentItem!.english.replaceAll('; ', '\n'),
+          textScaler: const TextScaler.linear(2),
+          style: lightFont,
+        ),
+    ];
+  }
+
+  List<Widget> getHebrew() {
+    return [
+      Text(
+        currentItem!.hebrew,
+        textScaler: const TextScaler.linear(2.25),
+        style: boldFont,
+        textDirection: TextDirection.rtl,
+      ),
+      if (currentItem?.phonetic.isNotEmpty ?? false) ...[
+        const SizedBox(height: 8),
+        Text(
+          currentItem?.phonetic ?? '',
+          textScaler: const TextScaler.linear(1.75),
+          style: italicFont,
+        ),
+      ],
+    ];
   }
 
   Widget _buildDictionaryButtons(String word) {
@@ -338,7 +363,7 @@ class VocabularyLearningScreenState
           const SizedBox(width: 16),
           _iconLink(
             Icons.g_translate,
-            'https://translate.google.com/?sl=iw&tl=en&text=${currentItem!.hebrew}',
+            'https://translate.google.com/?sl=iw&tl=en&text=${currentItem!.hebrew}&op=translate',
             24,
           ),
           const SizedBox(width: 16),
@@ -477,7 +502,7 @@ class VocabularyLearningScreenState
   Widget buildHeader() {
     var total = items.length;
     var used = items.where((x) => x.rank > 0).toList();
-    var known = used.where((x) => x.rank >= 8).toList();
+    var known = used.where((x) => x.rank >= _midRank).toList();
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
