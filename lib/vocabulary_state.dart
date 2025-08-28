@@ -25,7 +25,7 @@ class VocabularyLearningScreenState
 
   // Define min and max difficulty values
   final double _minDifficulty = 1.0;
-  final double _maxDifficulty = 11.0;
+  final double _maxDifficulty = 12.0;
 
   int _lastIndex = -1;
   int _vocabularyIndex = 0;
@@ -38,7 +38,7 @@ class VocabularyLearningScreenState
   final GlobalKey _buttonRowKey = GlobalKey();
 
   @override
-  String get version => '1.2.0';
+  String get version => '1.2.1';
 
   @override
   String get prefsKey => 'hebrew_vocabulary';
@@ -178,7 +178,7 @@ class VocabularyLearningScreenState
   void _handleDifficultySelection(double relativeX) async {
     // Map to difficulty range (1.0 to 11.0)
     final double difficulty = _minDifficulty +
-        pow(relativeX, 1.33) * (_maxDifficulty - _minDifficulty);
+        pow(relativeX, 1.5) * (_maxDifficulty - _minDifficulty);
 
     if (currentItem == null) return;
 
@@ -190,7 +190,7 @@ class VocabularyLearningScreenState
             : (difficulty + currentItem!.rank) / 2;
 
     // add a small amount to be sure to reach _finalRank
-    currentItem!.rank = (newRank + 0.25).round();
+    currentItem!.rank = newRank.round();
 
     // Handle word placement in deck
     items.removeAt(0);
