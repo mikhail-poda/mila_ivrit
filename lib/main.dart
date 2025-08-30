@@ -96,7 +96,7 @@ class VocabularyLearningScreen extends StatefulWidget {
 }
 
 class VocabularyLearningScreenState extends State<VocabularyLearningScreen> {
-  static const String version = '2.0.0';
+  static const String version = '2.0.1';
   static const String prefsKey = 'hebrew_vocabulary_v2';
   static const int finalRank = 6;
   static const int midRank = 4;
@@ -253,11 +253,10 @@ class VocabularyLearningScreenState extends State<VocabularyLearningScreen> {
     }
 
     words.removeAt(0);
-    if (currentWord!.rank >= finalRank) {
+    if (currentWord!.rank > finalRank) {
       excluded.add(currentWord!);
     } else {
-      var index =
-          pow(2, (currentWord!.rank + 1)).toInt().clamp(1, words.length);
+      var index = pow(2, (currentWord!.rank + 1)).toInt().clamp(1, words.length);
       words.insert(index, currentWord!);
     }
 
@@ -318,8 +317,7 @@ class VocabularyLearningScreenState extends State<VocabularyLearningScreen> {
   }
 
   Widget _buildHeader() {
-    final learning =
-        words.where((w) => w.rank > 0 && w.rank < finalRank).length;
+    final learning = words.where((w) => w.rank > 0).length;
     final mastered = excluded.length;
     final new_ = words.where((w) => w.rank == 0).length;
 
@@ -381,21 +379,24 @@ class VocabularyLearningScreenState extends State<VocabularyLearningScreen> {
         textScaler: const TextScaler.linear(2),
         style: lightFont,
       ),
-      const SizedBox(height: 16),
-      if (showTranslation) ...getHebrew(),
+      if (showTranslation) ...[
+        const SizedBox(height: 16),
+        ...getHebrew(),
+      ],
     ];
   }
 
   List<Widget> getL21Text(bool showTranslation) {
     return [
       ...getHebrew(),
-      const SizedBox(height: 16),
-      if (showTranslation)
+      if (showTranslation) ...[
+        const SizedBox(height: 16),
         Text(
           currentWord!.english.replaceAll('; ', '\n'),
           textScaler: const TextScaler.linear(2),
           style: lightFont,
         ),
+      ],
     ];
   }
 
