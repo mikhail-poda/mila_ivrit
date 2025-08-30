@@ -1,15 +1,16 @@
 import 'dart:convert';
-import 'dart:html' as html;
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:web/web.dart' as web;
 
 const boldFont = TextStyle(fontWeight: FontWeight.bold);
 const lightFont = TextStyle(fontWeight: FontWeight.w300);
-const italicFont = TextStyle(fontWeight: FontWeight.w300, fontStyle: FontStyle.italic);
+const italicFont =
+    TextStyle(fontWeight: FontWeight.w300, fontStyle: FontStyle.italic);
 
 void main() {
   runApp(const MyApp());
@@ -96,7 +97,7 @@ class VocabularyLearningScreen extends StatefulWidget {
 }
 
 class VocabularyLearningScreenState extends State<VocabularyLearningScreen> {
-  static const String version = '2.0.1';
+  static const String version = '2.0.5';
   static const String prefsKey = 'hebrew_vocabulary_v2';
   static const int finalRank = 6;
   static const int midRank = 4;
@@ -212,8 +213,19 @@ class VocabularyLearningScreenState extends State<VocabularyLearningScreen> {
       );
       await prefs.setString(prefsKey, json.encode(state.toJson()));
     } catch (e) {
-      print('Error saving state: $e');
+      printError('Error saving state: $e');
     }
+  }
+
+  void printError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   void _selectNextWord() {
@@ -256,25 +268,13 @@ class VocabularyLearningScreenState extends State<VocabularyLearningScreen> {
     if (currentWord!.rank > finalRank) {
       excluded.add(currentWord!);
     } else {
-      var index = pow(2, (currentWord!.rank + 1)).toInt().clamp(1, words.length);
+      var index =
+          pow(2, (currentWord!.rank + 1)).toInt().clamp(1, words.length);
       words.insert(index, currentWord!);
     }
 
     await _saveState();
     _selectNextWord();
-  }
-
-  void _playHebrewWord(String hebrewWord) {
-    try {
-      // Using the existing WebTTS functionality
-      final speechSynthesis = html.window.speechSynthesis;
-      final utterance = html.SpeechSynthesisUtterance(hebrewWord);
-      utterance.lang = 'he-IL';
-      utterance.rate = 0.8;
-      speechSynthesis?.speak(utterance);
-    } catch (e) {
-      print('TTS error: $e');
-    }
   }
 
   Widget _buildLoadingScreen() {
@@ -357,9 +357,9 @@ class VocabularyLearningScreenState extends State<VocabularyLearningScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children:
-                (currentWord!.rank >= midRank || currentWord!.rank == 0)
-                    ? getL12Text(showTranslation)
-                    : getL21Text(showTranslation),
+                    (currentWord!.rank >= midRank || currentWord!.rank == 0)
+                        ? getL12Text(showTranslation)
+                        : getL21Text(showTranslation),
               ),
             ),
           ),
@@ -451,22 +451,38 @@ class VocabularyLearningScreenState extends State<VocabularyLearningScreen> {
     );
   }
 
-  IconButton _iconLink(IconData icon, String link, double iconSize) {
-    return IconButton(
-      icon: Icon(icon, color: Colors.grey),
-      iconSize: iconSize,
-      onPressed: () {
-        final jsUrl = Uri.encodeFull(link);
-        html.window.open(jsUrl, '_blank');
-      },
-    );
-  }
-
   IconButton _playHebrewWordIcon(String hebrewWord) {
     return IconButton(
       icon: const Icon(Icons.volume_up, color: Colors.grey),
       iconSize: 24,
       onPressed: () => _playHebrewWord(hebrewWord),
+    );
+  }
+
+  void _playHebrewWord(String hebrewWord) {
+    try {
+      final speechSynthesis = web.window.speechSynthesis;
+      final utterance = web.SpeechSynthesisUtterance(hebrewWord);
+
+      utterance.lang = 'he-IL';
+      utterance.rate = 0.8;
+      utterance.pitch = 1.0;
+
+      speechSynthesis.speak(utterance);
+    } catch (e) {
+      printError('TTS error: $e');
+    }
+  }
+
+  IconButton _iconLink(IconData icon, String link, double iconSize) {
+    return IconButton(
+      icon: Icon(icon, color: Colors.grey),
+      iconSize: iconSize,
+      onPressed: () async {
+        await Clipboard.setData(ClipboardData(text: currentWord!.hebrew));
+        final jsUrl = Uri.encodeFull(link);
+        web.window.open(jsUrl, '_blank');
+      },
     );
   }
 
